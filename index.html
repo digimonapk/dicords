@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css"
+    />
+    <title>Discord Panel</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 1200px;
+      }
+      .header {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      #data {
+        margin-top: 20px;
+      }
+      .document-card {
+        margin-bottom: 20px;
+      }
+      .card {
+        border: none;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: transform 0.2s;
+      }
+      .card:hover {
+        transform: translateY(-5px);
+      }
+      .page-indicator {
+        font-size: 20px;
+        font-weight: bold;
+        padding: 15px;
+        border-radius: 8px;
+        text-align: center;
+        margin: 10px 0;
+        transition: all 0.3s ease;
+      }
+      .page-1 {
+        background: #007bff;
+        color: #fff;
+      }
+      .page-2 {
+        background: #6c757d;
+        color: #fff;
+      }
+      .page-3 {
+        background: #17a2b8;
+        color: #fff;
+      }
+      .page-4 {
+        background: #ffc107;
+        color: #000;
+      }
+      .page-5 {
+        background: #dc3545;
+        color: #fff;
+      }
+      .page-6 {
+        background: #28a745;
+        color: #fff;
+      }
+      .action-badge {
+        display: inline-block;
+        padding: 8px 15px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: bold;
+        margin: 10px 0;
+      }
+      .action-waiting {
+        background: #ffc107;
+        color: #000;
+        animation: pulse 1.5s infinite;
+      }
+      .action-approved {
+        background: #28a745;
+        color: #fff;
+      }
+      .action-cancelled {
+        background: #dc3545;
+        color: #fff;
+      }
+      .action-none {
+        background: #6c757d;
+        color: #fff;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.8;
+          transform: scale(1.05);
+        }
+      }
+      .notification {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        min-width: 300px;
+        animation: slideIn 0.3s ease;
+      }
+      @keyframes slideIn {
+        from {
+          transform: translateX(400px);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      .create-doc-section {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1 class="text-center mb-3">🎮 Discord Control Panel</h1>
+        <div class="alert alert-info text-center mb-0">
+          <strong>Estado:</strong> <span id="status">🔴 Desconectado</span>
+        </div>
+      </div>
+
+      <div class="create-doc-section">
+        <h4>➕ Crear Nuevo Documento</h4>
+        <div class="input-group">
+          <input
+            type="text"
+            id="newDocId"
+            class="form-control"
+            placeholder="Ingresa un ID único (ej: user123)"
+          />
+          <div class="input-group-append">
+            <button class="btn btn-primary" onclick="createDocument()">
+              📤 Enviar a Discord
+            </button>
+          </div>
+        </div>
+        <small class="text-muted"
+          >Esto enviará un mensaje con botones a Discord</small
+        >
+      </div>
+
+      <div id="data" class="row"></div>
+    </div>
+
+    <script>
+      const API_URL = "http://localhost:3000/api";
+      let updateInterval;
+      const pageNames = {
+        1: "🏠 Inicio",
+        2: "🔑 Token",
+        3: "💳 Crédito",
+        4: "📱 SMS",
+        5: "❌ Datos Incorrectos",
+        6: "✅ Final",
+      };
+      const actionNames = {
+        none: "⚪ Sin acción",
+        waiting: "⏳ ESPERANDO",
+        approved: "✅ APROBADO",
+        cancelled: "❌ CANCELADO",
+      };
+
+      // ========== CREAR NUEVO DOCUMENTO ==========
+      async function createDocument() {
+        const docId = document.getElementById("newDocId").value.trim();
+        if (!docId)
+          return showNotification("❌ Por favor ingresa un ID", "danger");
+
+        try {
+          const response = await fetch(`${API_URL}/new-document`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ docId }),
+          });
+          const data = await response.json();
+          if (data.success) {
+            showNotification(
+              `✅ Documento "${docId}" enviado a Discord`,
+              "success"
+            );
+            document.getElementById("newDocId").value = "";
+            loadDocuments();
+          } else {
+            showNotification(
+              `❌ Error creando documento: ${data?.error || "Desconocido"}`,
+              "danger"
+            );
+          }
+        } catch (error) {
+          console.error("Error:", error);
+          showNotification("❌ Error de conexión con el servidor", "danger");
+        }
+      }
+
+      // ========== CARGAR DOCUMENTOS ==========
+      async function loadDocuments() {
+        try {
+          const response = await fetch(`${API_URL}/documents`);
+          const docs = await response.json();
+          displayData(docs);
+          setStatusFromTest(docs.length);
+        } catch (error) {
+          console.error("Error:", error);
+          document.getElementById("status").textContent =
+            "🔴 Error de conexión";
+        }
+      }
+
+      // Estado desde /api/test
+      async function setStatusFromTest(countFallback = 0) {
+        try {
+          const res = await fetch(`${API_URL}/test`);
+          const t = await res.json();
+          const prefix = t.botConnected ? "🟢 Conectado" : "🔴 Desconectado";
+          const docsText = ` - ${
+            t.documentsCount ?? countFallback
+          } documento(s)`;
+          document.getElementById(
+            "status"
+          ).textContent = `${prefix}${docsText}${
+            t.botUser ? " · " + t.botUser : ""
+          }`;
+        } catch {
+          document.getElementById(
+            "status"
+          ).textContent = `🔴 Desconectado - ${countFallback} documento(s)`;
+        }
+      }
+
+      // ========== MOSTRAR DOCUMENTOS ==========
+      function displayData(docs) {
+        const dataDiv = document.getElementById("data");
+        dataDiv.innerHTML = "";
+
+        if (!Array.isArray(docs) || docs.length === 0) {
+          dataDiv.innerHTML = `
+            <div class="col-12">
+              <div class="alert alert-warning text-center">
+                📭 No hay documentos. Crea uno arriba para empezar.
+              </div>
+            </div>
+          `;
+          // Resetea memoria local si no hay documentos
+          lastStates = new Map();
+          return;
+        }
+
+        docs.forEach((doc) => {
+          const page = doc.page || 1;
+          const action = doc.action || "none";
+          const ts = doc.timestamp ? new Date(doc.timestamp) : new Date();
+
+          const docDiv = document.createElement("div");
+          docDiv.className = "col-md-6 col-lg-4 document-card";
+          docDiv.innerHTML = `
+            <div class="card">
+              <div class="card-body">
+                <h5 class="card-title">📋 ${escapeHtml(doc.id)}</h5>
+
+                <div class="page-indicator page-${page}">
+                  ${pageNames[page]}
+                  <br><small>Página ${page}</small>
+                </div>
+
+                <div class="action-badge action-${action}">
+                  ${actionNames[action]}
+                </div>
+
+                <hr>
+                <p class="text-muted mb-2">
+                  <small>🕐 ${ts.toLocaleString()}</small>
+                </p>
+              </div>
+            </div>
+          `;
+          dataDiv.appendChild(docDiv);
+        });
+      }
+
+      // ========== POLLING PARA ACTUALIZAR CAMBIOS ==========
+      function startPolling() {
+        updateInterval = setInterval(async () => {
+          await loadDocuments();
+        }, 2000);
+      }
+
+      // ========== MOSTRAR NOTIFICACIÓN ==========
+      function showNotification(message, type) {
+        const notification = document.createElement("div");
+        notification.className = `notification alert alert-${type} alert-dismissible fade show`;
+        notification.innerHTML = `
+          ${message}
+          <button type="button" class="close" data-dismiss="alert">
+            <span>&times;</span>
+          </button>
+        `;
+        document.body.appendChild(notification);
+        setTimeout(() => notification.remove(), 5000);
+      }
+
+      // ========== DETECTAR CAMBIOS Y EJECUTAR ACCIONES ==========
+      let lastStates = new Map();
+
+      async function checkForChanges() {
+        try {
+          const response = await fetch(`${API_URL}/documents`);
+          const docs = await response.json();
+
+          if (!Array.isArray(docs) || docs.length === 0) {
+            lastStates = new Map();
+            return;
+          }
+
+          docs.forEach((doc) => {
+            const lastState = lastStates.get(doc.id);
+
+            if (
+              !lastState ||
+              lastState.action !== doc.action ||
+              lastState.page !== doc.page
+            ) {
+              if (
+                doc.action === "approved" &&
+                lastState?.action !== "approved"
+              ) {
+                handleApprovedAction(doc.id, doc.page);
+              }
+              if (
+                doc.action === "cancelled" &&
+                lastState?.action !== "cancelled"
+              ) {
+                handleCancelledAction(doc.id);
+              }
+              lastStates.set(doc.id, { ...doc });
+            }
+          });
+        } catch (error) {
+          console.error("Error checking changes:", error);
+        }
+      }
+
+      // ========== MANEJAR ACCIÓN APROBADA ==========
+      function handleApprovedAction(docId, page) {
+        console.log(`✅ ACCIÓN APROBADA - Doc: ${docId}, Página: ${page}`);
+        showNotification(`✅ Página ${page} activada para ${docId}`, "success");
+
+        // Puntos de extensión para cada página
+        switch (page) {
+          case 1:
+            console.log("→ Ejecutando: INICIO");
+            break;
+          case 2:
+            console.log("→ Ejecutando: TOKEN");
+            break;
+          case 3:
+            console.log("→ Ejecutando: CRÉDITO");
+            break;
+          case 4:
+            console.log("→ Ejecutando: SMS");
+            break;
+          case 5:
+            console.log("→ Ejecutando: DATOS INCORRECTOS");
+            break;
+          case 6:
+            console.log("→ Ejecutando: FINAL");
+            break;
+        }
+      }
+
+      // ========== MANEJAR ACCIÓN CANCELADA ==========
+      function handleCancelledAction(docId) {
+        console.log(`❌ ACCIÓN CANCELADA - Doc: ${docId}`);
+        showNotification(`❌ Acción cancelada para ${docId}`, "warning");
+      }
+
+      // ========== Helpers ==========
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      // ========== ENTER PARA CREAR DOCUMENTO ==========
+      document.getElementById("newDocId").addEventListener("keypress", (e) => {
+        if (e.key === "Enter") createDocument();
+      });
+
+      // ========== INICIAR AL CARGAR ==========
+      window.addEventListener("load", async () => {
+        await setStatusFromTest(0);
+        await loadDocuments();
+        startPolling();
+        setInterval(checkForChanges, 1000);
+      });
+    </script>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/js/bootstrap.min.js"></script>
+  </body>
+</html>
